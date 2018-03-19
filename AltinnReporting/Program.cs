@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Configuration;
 using System.Text;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 
 namespace AltinnReporting
 {
@@ -19,7 +20,9 @@ namespace AltinnReporting
             string origin = ConfigurationManager.AppSettings["Origin"];
 
             var authCookie = AuthenticateAsync(uri, apiKey, username, password).GetAwaiter().GetResult();
-            var result = GetContentAsync(uri, apiKey, authCookie, origin, "/api/my/messages").GetAwaiter().GetResult();
+            //var result = GetContentAsync(uri, apiKey, authCookie, origin, "/api/918557261/messages/b246420323").GetAwaiter().GetResult();
+            var result = GetContentAsync(uri, apiKey, authCookie, origin, "/api/918557261/messages").GetAwaiter().GetResult();
+            //var result2 = PostContentAsync(uri, apiKey, authCookie, origin, "/api/918557261/messages?complete=false").GetAwaiter().GetResult();
         }
 
         static public async Task<Cookie> AuthenticateAsync(string baseUrl, string apiKey, string username, string password)
@@ -62,6 +65,29 @@ namespace AltinnReporting
                 itemResult.EnsureSuccessStatusCode();
 
                 return await itemResult.Content.ReadAsStringAsync();
+            }
+        }
+
+        static public async Task<string> PostContentAsync(string baseUrl, string apiKey, Cookie authCookie, string origin, string uri)
+        {
+            var handler = GetHttpBaseClientHandler();
+
+            handler.CookieContainer.Add(authCookie);
+
+            using (var client = new HttpClient(handler))
+            {
+                client.BaseAddress = new Uri(baseUrl);
+                client.DefaultRequestHeaders.Add("Accept", "application/hal+json");
+                client.DefaultRequestHeaders.Add("ApiKey", apiKey);
+                client.DefaultRequestHeaders.Add("Origin", origin);
+
+                var jsonData = GetJsonFormData();
+
+                var postResult = await client.PostAsync(uri, jsonData);
+
+                postResult.EnsureSuccessStatusCode();
+
+                return await postResult.Content.ReadAsStringAsync();
             }
         }
 
@@ -109,8 +135,45 @@ namespace AltinnReporting
 
         static StringContent GetJsonAuthDetails(string username, string password)
         {
-            var str = string.Format("{{\"UserName\":\"{0}\",\"UserPassword\":\"{1}\"}}", username, password);
-            var content = new StringContent(str,
+            JObject jsonAuthData = new JObject(
+                new JProperty("UserName", username),
+                new JProperty("UserPassword", password)
+            );
+
+            var content = new StringContent(jsonAuthData.ToString(),
+                                    Encoding.UTF8,
+                                    "application/hal+json"); // CONTENT-TYPE header
+            return content;
+        }
+
+        static StringContent GetJsonFormData()
+        {
+            JObject jsonData = new JObject(
+                new JProperty("Type", "FormTask"),
+                new JProperty("ServiceCode", "123"),
+                new JProperty("ServiceEdition", "64"),
+                new JProperty("_embedded",
+                    new JObject(
+                        new JProperty("forms",
+                            new JObject(
+                                new JProperty("Type", "MainForm"),
+                                new JProperty("DataFormatId", "1023"),
+                                new JProperty("DataFormatVersion", "1"),
+                                new JProperty("FormData", "<Skjema></Skjema>")
+                            )
+                        ),
+                        new JProperty("attachments",
+                            new JObject(
+                                new JProperty("FileName", "string example 1"),
+                                new JProperty("AttachmentType", "string example 2"),
+                                new JProperty("Data", "")
+                                )
+                            )
+                        )
+                    )
+                );
+
+            var content = new StringContent(jsonData.ToString(),
                                     Encoding.UTF8,
                                     "application/hal+json"); // CONTENT-TYPE header
             return content;
